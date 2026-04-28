@@ -1,90 +1,122 @@
 import 'package:flutter/material.dart';
 import '../../components/editor.dart';
 import '../../models/transferencia.dart';
+import '../../database/transferencia_dao.dart';
 
 class FormularioTransferencia extends StatefulWidget {
-  final TextEditingController _controladorCampoNumeroConta =
-      TextEditingController();
-  final TextEditingController _controladorCampoValor = TextEditingController();
+  const FormularioTransferencia({super.key});
 
   @override
-  State<StatefulWidget> createState() {
-    return FormularioTransferenciaState();
-  }
+  State<FormularioTransferencia> createState() =>
+      _FormularioTransferenciaState();
 }
 
-class FormularioTransferenciaState extends State<FormularioTransferencia> {
-  
-  static const _tituloAppBar = 'Criando Transferência';
-  static const _rotuloCampoValor = 'Valor';
-  static const _dicaCampoValor = '0.00';
+class _FormularioTransferenciaState extends State<FormularioTransferencia> {
+  static const _tituloAppBar = 'Nova Transferência';
 
-  static const _rotuloCampoNumeroConta = 'Número Conta';
-  static const _dicaCampoNumeroConta = '0000';
-  static const _textBotaoConfirmar = 'Confirmar';
+  final _controladorCampoNumeroConta = TextEditingController();
+  final _controladorCampoValor = TextEditingController();
 
-  
+  final _dao = TransferenciaDao();
+
+  @override
+  void dispose() {
+    _controladorCampoNumeroConta.dispose();
+    _controladorCampoValor.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _tituloAppBar,
-          // style: TextStyle(
-          //   color: Colors.white70,
-          //   fontSize: 20,
-          //   fontWeight: FontWeight.bold,
-          // ),
-        ),
-        //backgroundColor: const Color.fromRGBO(33, 150, 243, 1),
+        title: const Text(_tituloAppBar),
       ),
-
       body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          children: <Widget>[
+          children: [
             Editor(
-              controlador: widget._controladorCampoNumeroConta,
-              rotulo: _rotuloCampoNumeroConta,
-              dica: _dicaCampoNumeroConta,
+              controlador: _controladorCampoNumeroConta,
+              rotulo: 'Número da Conta',
+              dica: '0000',
+              tipoTeclado: TextInputType.number,
             ),
-
+            const SizedBox(height: 16),
             Editor(
-              controlador: widget._controladorCampoValor,
-              rotulo: _rotuloCampoValor,
-              dica: _dicaCampoValor,
+              controlador: _controladorCampoValor,
+              rotulo: 'Valor',
+              dica: '0.00',
               icone: Icons.monetization_on,
+              tipoTeclado: TextInputType.numberWithOptions(decimal: true),
             ),
-
-            ElevatedButton(
-              child: Text(_textBotaoConfirmar),
-              onPressed: () {
-                debugPrint("Clicou no Confirmar!");
-                _criaTransferencia(
-                  context,
-                  widget._controladorCampoNumeroConta,
-                  widget._controladorCampoValor,
-                );
-              },
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () => _criaTransferencia(context),
+                child: const Text('Confirmar'),
+              ),
             ),
           ],
         ),
       ),
     );
   }
-}
 
-void _criaTransferencia(
-  BuildContext context,
-  TextEditingController controladorCampoNumeroConta,
-  TextEditingController controladorCampoValor,
-) {
-  final int? numeroConta = int.parse(controladorCampoNumeroConta.text);
-  final double? valor = double.parse(controladorCampoValor.text);
+  Future<void> _criaTransferencia(BuildContext context) async {
+    final String textoNumeroConta = _controladorCampoNumeroConta.text.trim();
+    final String textoValor = _controladorCampoValor.text.trim();
 
-  if (numeroConta != null && valor != null) {
-    final transferenciaCriada = Transferencia(valor, numeroConta);
-    debugPrint("Criando Transferência...");
-    debugPrint("$transferenciaCriada");
-    Navigator.pop(context, transferenciaCriada);
+    if (textoNumeroConta.isEmpty || textoValor.isEmpty) {
+      _mostrarMensagemErro(context, 'Por favor, preencha todos os campos.');
+      return;
+    }
+
+    try {
+      final int numeroConta = int.parse(textoNumeroConta);
+      final double valor = double.parse(textoValor.replaceAll(',', '.'));
+
+      if (valor <= 0) {
+        _mostrarMensagemErro(context, 'O valor deve ser maior que zero.');
+        return;
+      }
+
+      final transferencia = Transferencia(
+        valor: valor,
+        numeroConta: numeroConta,
+      );
+
+      final int id = await _dao.inserir(transferencia);
+
+      final transferenciaSalva = Transferencia(
+        id: id,
+        valor: valor,
+        numeroConta: numeroConta,
+      );
+
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Transferência salva com sucesso!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pop(context, transferenciaSalva);
+    } catch (e) {
+      _mostrarMensagemErro(context, 'Erro ao salvar. Verifique os dados informados.');
+    }
+  }
+
+  void _mostrarMensagemErro(BuildContext context, String mensagem) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensagem),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
 }
